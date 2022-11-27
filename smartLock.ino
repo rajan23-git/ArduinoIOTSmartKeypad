@@ -6,28 +6,43 @@
 **********************************************************************/
 #include <WiFi.h>
 #include <HTTPClient.h>
-const char* ssid = "UPIoT";
-const char* password = "";
+#include <Keypad.h>
+#include <Wire.h>
+//const char * ssid = "UPIoT";
+//const char * password = "";
+const char* ssid = "Ayurveda";
+const char* password = "Sarinivi1";
 const char* FetchConfiguredPasscode = "http://pranavrajan568.pythonanywhere.com/FetchConfiguredPasscode";
+const char * FetchUnlockedStatus = "http://pranavrajan568.pythonanywhere.com/FetchUnlockedStatus";
 const char * serverName = "http://pranavrajan568.pythonanywhere.com";
 String myDeviceId = "94:E6:86:E1:20:DC ";
+
 unsigned long lastTime = 0;
 unsigned long timerDelay = 3000;
 unsigned long lastMotionTime = 0;
 unsigned long motionTimerDelay = 500;
 
 String finalUrl;
-String configuredPasscode;
+
+
+
 #define PIN_BUTTON 4
 #define TRIG 5
 #define ECHO 18
 float distance;
 float duration;
+float timeUltrasonic =  200 * 60;
+
+
+#define ledPin 2
+
 
 String enteredPasscode = "";
+String configuredPasscode;
+String current_unlocked_status = "Lock";
+
 
 // the setup function runs once when you press reset or power the board
-#include <Keypad.h>
 
 #define ROW_NUM     4 // four rows
 #define COLUMN_NUM  4 // four columns
@@ -51,7 +66,9 @@ Keypad keypad = Keypad( makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_
 
 
 void setup() {
+  
   // initialize dpin as an INPUT
+  pinMode(ledPin,OUTPUT);
   pinMode(PIN_BUTTON, INPUT);
    pinMode(TRIG, OUTPUT);
    pinMode(ECHO,INPUT);
@@ -133,7 +150,7 @@ http.addHeader("Content-Type","text/plain");
 String requestData = "Post";
 int responseCode = http.POST(requestData);
 
-//Serial.println("This is reponse code for sending passcode "+ String(responseCode));
+Serial.println("This is reponse code for sending passcode "+ String(responseCode));
 
 http.end();
   
@@ -151,7 +168,7 @@ http.addHeader("Content-Type","text/plain");
 String requestData = "Post";
 int responseCode = http.POST(requestData);
 
-//Serial.println("This is reponse code for sending Motion "+ String(responseCode));
+Serial.println("This is reponse code for sending Motion "+ String(responseCode));
 
 http.end();
   
@@ -161,44 +178,50 @@ http.end();
 
 
 float ultrasonicSensor(){
-  digitalWrite(TRIG,LOW);
- delayMicroseconds(2);
-  digitalWrite(TRIG,HIGH);
-   delayMicroseconds(10);
     digitalWrite(TRIG,LOW);
-  duration = pulseIn(ECHO,HIGH);
- distance = duration * .034 / 2;
-Serial.println("The distance away  in cm is : " + String(distance));
+    delayMicroseconds(2);
+    digitalWrite(TRIG,HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG,LOW);
+    duration = pulseIn(ECHO,HIGH);
+    distance = duration * .034 / 2;
+    if(distance !=0){
+      Serial.println("The distance away  in cm is : " + String(distance));
+    }
 
-return distance;
+    return distance;
 
 
   
 }
 
 void keypadEnterPasscode(){
-
-
      char typedChar = keypad.getKey();
+
      if(typedChar){
-         Serial.println("you typed a character");
 
          if(typedChar != 'A'){
          enteredPasscode += typedChar;
-         Serial.println("what you entered so far" + enteredPasscode);
-
+         Serial.println("what you entered so far = " + enteredPasscode);
+        
 
          }
 
          else if(typedChar == 'A'){
              if(enteredPasscode.equals(configuredPasscode)){
-                Serial.println("Access Accepted , entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode  );
+                Serial.println("Accepted Access, entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode  );
+                
                 sendPasscode(enteredPasscode, "Yes", serverName);
                 enteredPasscode = "";
+                digitalWrite(ledPin,HIGH);
+                delay(1000);
+                digitalWrite(ledPin,LOW);
+
              }
     
              else if(!(enteredPasscode.equals(configuredPasscode))){
-              Serial.println("Access Denied  , entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode);
+              Serial.println("Denied Access , entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode);
+                
               sendPasscode(enteredPasscode,"No",serverName);
               enteredPasscode = "";
              }
@@ -218,46 +241,54 @@ void keypadEnterPasscode(){
 // the loop function runs over and ovser again forever
 void loop() {
   
-  
-if ((millis() - lastTime) > timerDelay) {
-    //Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED){
+
+
+      if ((millis() - lastTime) > timerDelay) {
+        
+          //Check WiFi connection status
+          if(WiFi.status()== WL_CONNECTED){
+            
+            configuredPasscode = httpGETRequest(FetchConfiguredPasscode);
+            String temp_unlocked_status = current_unlocked_status;
+            current_unlocked_status = httpGETRequest(FetchUnlockedStatus);
+            Serial.println("temp_unlocked_status = " + temp_unlocked_status + " current_unlocked_status = " + current_unlocked_status); 
+            
+            if(temp_unlocked_status.equals("Lock") && current_unlocked_status.equals("Unlock")){
+              digitalWrite(ledPin,HIGH);
+              delay(1000);
+              digitalWrite(ledPin,LOW);
+            }
+
+            if(temp_unlocked_status.equals("Unlock") && current_unlocked_status.equals("Lock")){
+              digitalWrite(ledPin,HIGH);
+              delay(1000);
+              digitalWrite(ledPin,LOW);
+            }
+            
+      //      Serial.println("Configured Passcode"+ String(configuredPasscode));
+      //      sendPasscode("12543","yes",serverName);      
+           
+          }
       
-      configuredPasscode = httpGETRequest(FetchConfiguredPasscode);
+          else {
+            Serial.println("WiFi Disconnected");
+          }
+          lastTime = millis();
+        }
       
-//      Serial.println("Configured Passcode"+ String(configuredPasscode));
-//      sendPasscode("12543","yes",serverName);
-     
-    }
-
-    
-    else {
-      Serial.println("WiFi Disconnected");
-    }
-    lastTime = millis();
-
-  
-  }
-
-
-  if(WiFi.status() == WL_CONNECTED){
-  
-   keypadEnterPasscode();
-    
-  }
-
- if((millis() - lastMotionTime) > motionTimerDelay ){
-     float dist = ultrasonicSensor();
-       if(dist < 5){
-        sendMotionData(String(dist),serverName);
+      
+      
+       if((millis() - lastMotionTime) > motionTimerDelay ){
+           float dist = ultrasonicSensor();
+             if(dist < 5 && dist !=0){
+              sendMotionData(String(dist),serverName);
+             }
+           
+      
+        lastMotionTime = millis();
        }
-     
 
-  lastMotionTime = millis();
- }
-
+      keypadEnterPasscode();
   
-
-
  
 }
