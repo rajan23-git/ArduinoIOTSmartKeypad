@@ -54,8 +54,8 @@ char keys[ROW_NUM][COLUMN_NUM] = {
   {'*', '0', '#', 'D'}
 };
 
-byte pin_rows[ROW_NUM] = {14,27,26, 25}; // GIOP18, GIOP5, GIOP17, GIOP16 connect to the row pins
-byte pin_column[COLUMN_NUM] = {13,21,22,23};  // GIOP4, GIOP0, GIOP2 connect to the column pins
+byte pin_rows[ROW_NUM] = {14,27,26, 25}; 
+byte pin_column[COLUMN_NUM] = {13,21,22,23};  
 
 Keypad keypad = Keypad( makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM );
 
@@ -185,9 +185,9 @@ float ultrasonicSensor(){
     digitalWrite(TRIG,LOW);
     duration = pulseIn(ECHO,HIGH);
     distance = duration * .034 / 2;
-    if(distance !=0){
-      Serial.println("The distance away  in cm is : " + String(distance));
-    }
+//    if(distance !=0){
+//      Serial.println("The distance away  in cm is : " + String(distance));
+//    }
 
     return distance;
 
@@ -251,7 +251,7 @@ void loop() {
             configuredPasscode = httpGETRequest(FetchConfiguredPasscode);
             String temp_unlocked_status = current_unlocked_status;
             current_unlocked_status = httpGETRequest(FetchUnlockedStatus);
-            Serial.println("temp_unlocked_status = " + temp_unlocked_status + " current_unlocked_status = " + current_unlocked_status); 
+//            Serial.println("temp_unlocked_status = " + temp_unlocked_status + " current_unlocked_status = " + current_unlocked_status); 
             
             if(temp_unlocked_status.equals("Lock") && current_unlocked_status.equals("Unlock")){
               digitalWrite(ledPin,HIGH);
