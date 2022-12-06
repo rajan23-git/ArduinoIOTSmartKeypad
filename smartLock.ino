@@ -8,10 +8,10 @@
 #include <HTTPClient.h>
 #include <Keypad.h>
 #include <Wire.h>
-//const char * ssid = "UPIoT";
-//const char * password = "";
-const char* ssid = "Ayurveda";
-const char* password = "Sarinivi1";
+const char * ssid = "UPIoT";
+const char * password = "";
+//const char* ssid = "Ayurveda";
+//const char* password = "Sarinivi1";
 const char* FetchConfiguredPasscode = "http://pranavrajan568.pythonanywhere.com/FetchConfiguredPasscode";
 const char * FetchUnlockedStatus = "http://pranavrajan568.pythonanywhere.com/FetchUnlockedStatus";
 const char * serverName = "http://pranavrajan568.pythonanywhere.com";
@@ -33,16 +33,17 @@ float distance;
 float duration;
 float timeUltrasonic =  200 * 60;
 
-
+#include <ESP32Servo.h>
 #define ledPin 2
-
+int servoAngle = 0;
+int servoPin = 15;
+Servo lockServo;
+ 
 
 String enteredPasscode = "";
 String configuredPasscode;
 String current_unlocked_status = "Lock";
 
-
-// the setup function runs once when you press reset or power the board
 
 #define ROW_NUM     4 // four rows
 #define COLUMN_NUM  4 // four columns
@@ -67,19 +68,23 @@ Keypad keypad = Keypad( makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_
 
 void setup() {
   
-  // initialize dpin as an INPUT
-  pinMode(ledPin,OUTPUT);
-  pinMode(PIN_BUTTON, INPUT);
+  // initialize LED, TRIG, ECHO pins 
+   pinMode(ledPin,OUTPUT);
+   pinMode(PIN_BUTTON, INPUT);
    pinMode(TRIG, OUTPUT);
    pinMode(ECHO,INPUT);
+   
+  lockServo.setPeriodHertz(50);// servo is initialized at 50 Hertz
+  lockServo.attach(servoPin, 500, 2500);  
+   
   Serial.begin(115200); //Set the baud rate to 115200
 
 
-  // #start the wifi by starting it by passing the wifi name and the password to connect to your network
+  // beginning the wifi connection by providing it the ssid and password
   WiFi.begin(ssid, password);
   Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
-    // #while it waiting to connect it will print a dot every half second
+    // while it waiting to connect it will print a dot every half second
     delay(500);
     Serial.print(".");
   }
@@ -87,35 +92,19 @@ void setup() {
   Serial.println("");
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP());
-
-  // # notice how we build the string here in pieces, it's something that will be critical to your learning here
+  //keeps trying over the given timer delay to establish connection
   Serial.println("Timer set to " + String(timerDelay) + " miliseconds (timerDelay variable), it will take that long before publishing the first reading.");
 
   
 }
 
-void myButtonPushed(){
- if (digitalRead(PIN_BUTTON) == HIGH) {
-    Serial.println("YOU ARE PUSHING MY BUTTON");
-    delay(333);
-  }else{
-    delay(777);
-    Serial.print("+.+.");
-  }
- 
-}
 
-
+//this method makes GET request, retreiving the information returned from a flask route
 String httpGETRequest(const char* serverName) {
   HTTPClient http;
-
-
+  
   finalUrl = serverName; 
-
-//  Serial.println("Before:  " + finalUrl);
-//  finalUrl = finalUrl + myDeviceId + "/" +"aSDFasdhfka" + "/";
   finalUrl = finalUrl;
-//  Serial.println("After:  " + finalUrl);
   
   http.begin(finalUrl);
   
@@ -123,31 +112,32 @@ String httpGETRequest(const char* serverName) {
   
   String payload = "{}"; 
 
-  
   if (httpResponseCode>0) {
-//    Serial.print("This the get request HTTP Response code: ");
-//    Serial.println(httpResponseCode);
     payload = http.getString();
   }
   else {
-//    Serial.print("Error code: ");
-//    Serial.println(httpResponseCode);
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
   }
   http.end();
 
   return payload;
 }
 
+//this method makes a POST request, sending the entered passcode by the user along with a boolean, indicating whether the entered passcode is correct or not
 void sendPasscode(String entered_passcode,String correct_boolean ,const char * serverLink){
+  
 HTTPClient http;
 String urlLink = serverLink;
 
+//inserts the entered_passcode and correct_boolean values into the URL
 urlLink = urlLink + "/" + String(entered_passcode)+"/"+String(correct_boolean);
-//Serial.println("This is the url link sent to " + urlLink);
+Serial.println("This is the url link sent to " + urlLink);
+
 http.begin(urlLink);
-//break;
 http.addHeader("Content-Type","text/plain");
 String requestData = "Post";
+//Makes POST Request at the URL
 int responseCode = http.POST(requestData);
 
 Serial.println("This is reponse code for sending passcode "+ String(responseCode));
@@ -156,15 +146,20 @@ http.end();
   
 }
 
+//this method sends motion detected at the doorbell through the ultrasonic sensor
+//sends this data through a POST request to the backend
 void sendMotionData(String doorbell_distance,const char * serverLink){
 HTTPClient http;
 String urlLink = serverLink;
 
+//doorbell distance is embedded in url, that is called in POST request
 urlLink = urlLink + "/" + String(doorbell_distance);
 Serial.println("This is the url link sent to " + urlLink);
+
 http.begin(urlLink);
-//break;
 http.addHeader("Content-Type","text/plain");
+
+//POST request sent
 String requestData = "Post";
 int responseCode = http.POST(requestData);
 
@@ -176,7 +171,7 @@ http.end();
 }
 
 
-
+//this method calculates the distance between the user and the doorbell, through utilizing the ultrasonic sensor
 float ultrasonicSensor(){
     digitalWrite(TRIG,LOW);
     delayMicroseconds(2);
@@ -184,44 +179,77 @@ float ultrasonicSensor(){
     delayMicroseconds(10);
     digitalWrite(TRIG,LOW);
     duration = pulseIn(ECHO,HIGH);
+//calculates distance based on duration of sound wave traveling back and forth
     distance = duration * .034 / 2;
-//    if(distance !=0){
-//      Serial.println("The distance away  in cm is : " + String(distance));
-//    }
 
     return distance;
 
+}
 
+//this method turns on an LED for 3 seconds, to simulate a lock that is unlocking
+void writeLED(){
+ digitalWrite(ledPin,HIGH);
+ delay(3000);
+ digitalWrite(ledPin,LOW);
   
 }
 
+
+//this method rotates the servo 90 degrees, to demonstrate the unlocking of a lock
+void unlockServo(){
+ for(servoAngle = 0 ; servoAngle < 90 ; servoAngle += 1 ){
+         lockServo.write(servoAngle);
+         delay(15);
+ }
+ delay(1000);
+                
+ for(servoAngle = 90 ; servoAngle > 0 ; servoAngle -= 1 ){
+         lockServo.write(servoAngle);
+         delay(15);
+ }
+  
+}  
+  
+
+//this method allows the user to enter keys to enter a passcode on the keypad
+//this method validates if the user has entered the correct passcode
 void keypadEnterPasscode(){
      char typedChar = keypad.getKey();
 
      if(typedChar){
-
+        //if key 'A' is not typed, lets the user keep typing in the passcode
          if(typedChar != 'A'){
          enteredPasscode += typedChar;
          Serial.println("what you entered so far = " + enteredPasscode);
         
 
          }
-
+        //if key 'A' is typed then then the entered passcode is checked to see if it is correct
          else if(typedChar == 'A'){
+          
+            //if entered passcode is correct
              if(enteredPasscode.equals(configuredPasscode)){
-                Serial.println("Accepted Access, entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode  );
+                //access granted
+                //correct attempt sent to backend through POST request, which is then added to LoginAttemptTable in SQL Database
+                //passcode reinitialized for next attempt
+                //LED lights up, demonstrating unlocking
+                //Servo Lock turns, demonstrating unlocking
                 
+                Serial.println("Accepted Access, entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode  );
                 sendPasscode(enteredPasscode, "Yes", serverName);
                 enteredPasscode = "";
-                digitalWrite(ledPin,HIGH);
-                delay(1000);
-                digitalWrite(ledPin,LOW);
+                writeLED();
+                unlockServo();
+                
 
              }
-    
+             //if the entered passcode is incorrect
              else if(!(enteredPasscode.equals(configuredPasscode))){
+              //access is not granted
+              //login attempt sent to backend through POST request, which is then added to LoginAttemptTable in SQL Database
+              //entered passcode reinitialized for next attempt
+
               Serial.println("Denied Access , entered Passcode =" + enteredPasscode  + " configured Passcode = " + configuredPasscode);
-                
               sendPasscode(enteredPasscode,"No",serverName);
               enteredPasscode = "";
              }
@@ -241,33 +269,29 @@ void keypadEnterPasscode(){
 // the loop function runs over and ovser again forever
 void loop() {
   
+keypadEnterPasscode();
 
 
       if ((millis() - lastTime) > timerDelay) {
         
-          //Check WiFi connection status
           if(WiFi.status()== WL_CONNECTED){
-            
+            //keeps retreiving the configured passcode from the backend, on each timer delay
             configuredPasscode = httpGETRequest(FetchConfiguredPasscode);
+            
+            //gets the unlocked status of the lock from the backend web form
             String temp_unlocked_status = current_unlocked_status;
             current_unlocked_status = httpGETRequest(FetchUnlockedStatus);
-//            Serial.println("temp_unlocked_status = " + temp_unlocked_status + " current_unlocked_status = " + current_unlocked_status); 
-            
+
+            //if the Admin changes the status from Lock to Unlock, the LED lights up to simulate unlocking
             if(temp_unlocked_status.equals("Lock") && current_unlocked_status.equals("Unlock")){
-              digitalWrite(ledPin,HIGH);
-              delay(1000);
-              digitalWrite(ledPin,LOW);
+              writeLED();
+            }
+            //if the Admin changes the status from Unlock to Lock, the LED lights up to simulate locking
+            if(temp_unlocked_status.equals("Unlock") && current_unlocked_status.equals("Lock")){
+              writeLED();
             }
 
-            if(temp_unlocked_status.equals("Unlock") && current_unlocked_status.equals("Lock")){
-              digitalWrite(ledPin,HIGH);
-              delay(1000);
-              digitalWrite(ledPin,LOW);
-            }
-            
-      //      Serial.println("Configured Passcode"+ String(configuredPasscode));
-      //      sendPasscode("12543","yes",serverName);      
-           
+                 
           }
       
           else {
@@ -277,9 +301,11 @@ void loop() {
         }
       
       
-      
+       //at every motion timer delay
        if((millis() - lastMotionTime) > motionTimerDelay ){
-           float dist = ultrasonicSensor();
+             float dist = ultrasonicSensor();
+             //threshold distance is 5cm
+             //if distance to the doorbell is within the threshold value, then doorbell distance is sent to Flask backend
              if(dist < 5 && dist !=0){
               sendMotionData(String(dist),serverName);
              }
@@ -288,7 +314,6 @@ void loop() {
         lastMotionTime = millis();
        }
 
-      keypadEnterPasscode();
   
  
 }
